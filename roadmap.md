@@ -1,0 +1,24 @@
+# FSC mock UI
+- [x] Replace the sign-in/sign-out flow with role switching in the profile menu.
+- [x] Add Shipper Ledger navigation and show only that shipper’s active/master shipment financial records; keep Rob Account Ledger selected by default.
+- [ ] Update shipment CHA/BE/reference/screenshot fields and TPT payment labels; add Rob ledger dropdown while retaining GSM–OX Deal Ledger.
+- [x] Add screenshot upload and thumbnail display for each payment record.
+- [ ] Match the CHA screenshot dashboard and verify card navigation to Active Shipments.
+- [ ] Derive CHA metrics from the same records as shipment pages and verify updates survive navigation.
+- [x] Recreate all admin and user screens with prototype records and clean visual system.
+- [x] Implement searchable createable shipment values, AGV composition, enhancement and CHA placement.
+- [x] Implement full/partial TPT reservation and revised Rob ledger entry flow.
+- [x] Verify mock role navigation and shipment/payment/ledger flows.
+- [x] Restore screenshot-complete shipment and member forms with matching sample data.
+- [x] Restore Meeting notes participants, cost calculator and cost configuration.
+- [x] Restore Settings themes, table colors, tag colors, widget and headlines.
+- [x] Verify the restored flows and screenshot layouts (16 tests and browser flows passed; final build telemetry unavailable).
+- [x] Preserve shipment fields/icons, use a Linked Agencies dropdown, and add admin dashboard row editing.
+- [x] Connect ledger transfers to inline payments and saved full/partial TPT calculations.
+- [x] Match screenshot Ledger and Meeting layouts and verify the complete mock flow (22 tests, browser checks and build OK).
+- [x] Run the workspace headline marquee across the full content block with faded edges and hover pause.
+- [x] Show one headline per pass at a slow, readable pace, switching to the continuous band only when several headlines exist.
+- [x] Show the newest ledger transfer's own amount as the shipment TPT Reserved Amount, labelled simply "From ledger".
+- [x] Rename to "AGV Composition", add No. of Containers after Vase.
+- [x] Splash + Member ID/Access Key sign-in against User Management members, log out.
+- [x] Admin weather pencil edit, password column, screenshot cost calculator (admin only), Receiver and CHA screen sets.

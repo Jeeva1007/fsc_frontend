@@ -1,0 +1,170 @@
+/* Add Ledger Entry tab: the form sits on the tab's own screen, with its actions kept in view at the bottom. */
+.tpt-form {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+.tpt-form-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+}
+.tpt-form-header h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.tpt-form-header p {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+.tpt-form-body {
+  padding: 22px 24px 24px;
+}
+.tpt-form-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 24px;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 7px 7px;
+}
+.tpt-entry-card {
+  padding: 16px 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  scroll-margin-top: 16px;
+}
+.tpt-entry-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 36px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.tpt-entry-card .form-section-title:not(:first-child) {
+  margin-top: 10px;
+}
+@media (max-width: 500px) {
+  .tpt-entry-card .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+/* OX to GSM pop-up: its two-column form needs more room than the default dialog. */
+.ox-gsm-dialog {
+  max-width: 640px;
+}
+@media (max-width: 500px) {
+  .ox-gsm-dialog .form-grid.two-col {
+    grid-template-columns: 1fr;
+  }
+}
+/* Account ledger Add Entry: spaced cards on the page background, like the Add Ledger Entry form. */
+.ledger-transfer-form .tpt-form-body {
+  display: grid;
+  gap: 16px;
+  background: var(--background);
+}
+.ledger-transfer-form .tpt-entry-card {
+  background: var(--card);
+}
+
+/* Clickable Payment Status cell + matched-entries dialog */
+.da-status-btn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  background: none;
+  border: 0;
+  padding: 4px 6px;
+  margin: -4px -6px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+.da-status-btn:hover {
+  background: color-mix(in oklch, var(--primary) 10%, transparent);
+}
+.da-status-btn small {
+  color: var(--muted-foreground);
+  font-size: 9px;
+}
+/* A "Matched" status is not clickable: same layout as the button, without hover or pointer. */
+.da-status-static {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.da-status-static small {
+  color: var(--muted-foreground);
+  font-size: 9px;
+}
+/* Matched-entries search bar: BE No. / ORM No. switch, number box, Search. */
+.match-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.match-search input {
+  width: min(280px, 100%);
+}
+.match-type {
+  display: inline-flex;
+  gap: 4px;
+}
+/* The matched-entries popup shows the same full-column rows as the register, so it is wide + scrollable. */
+.match-dialog {
+  max-width: min(1200px, 96vw);
+  width: 96vw;
+}
+.match-table-scroll {
+  margin: 10px 0 14px;
+  max-height: 62vh;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.match-table-scroll table {
+  margin: 0;
+}
+/* The popup is outside .shipments-panel.da-panel, so re-add the register's column + group lines here. */
+.match-table-scroll .da-sheet thead th,
+.match-table-scroll .da-sheet tbody tr td {
+  border-right: 1px solid var(--border);
+  vertical-align: middle;
+}
+.match-table-scroll .da-sheet tbody.da-group tr:last-child td {
+  border-bottom: 1px solid var(--border);
+}
+.match-empty {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  text-align: center;
+  padding: 14px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  margin: 0 0 14px;
+}
+.match-sample-tag {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--warning, #b7791f);
+  background: var(--warning-bg, #fdf6e3);
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+  border-radius: 20px;
+  margin-left: 8px;
+  vertical-align: middle;
+}

@@ -1,0 +1,253 @@
+/* Debit Advice register: uses the Shipments table look; these rules only cover its split rows and the form. */
+.da-panel {
+  margin-top: 20px;
+}
+.da-panel .da-reference {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* An advice is one tbody, so striping by row would cut through merged cells: it highlights as a group instead. */
+.shipments-panel.da-panel .da-sheet tbody tr td,
+.shipments-panel.da-panel .da-sheet tbody tr td:first-child,
+.shipments-panel.da-panel .da-sheet tbody tr td:last-child {
+  background: var(--card);
+  border-right: 1px solid var(--border);
+  vertical-align: middle;
+}
+.shipments-panel.da-panel .da-sheet tbody.da-group:hover tr td,
+.shipments-panel.da-panel .da-sheet tbody.da-group:hover tr td:first-child,
+.shipments-panel.da-panel .da-sheet tbody.da-group:hover tr td:last-child {
+  background: var(--info-bg);
+}
+/* Each advice is its own tbody, so the base table's "no border on the last row" would drop the line between them. */
+.shipments-panel.da-panel .da-sheet tbody.da-group tr:last-child td {
+  border-bottom: 1px solid var(--border);
+}
+/* A split row's first and last cells are ordinary data, so only the real Sl. No. and Actions cells may stick. */
+.shipments-panel.da-panel .da-sheet tbody tr td:first-child,
+.shipments-panel.da-panel .da-sheet tbody tr td:last-child {
+  position: static;
+  box-shadow: none;
+  text-align: left;
+}
+.shipments-panel.da-panel .da-sheet tbody tr td.da-sl {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  box-shadow: 1px 0 0 var(--border);
+}
+.shipments-panel.da-panel .da-sheet tbody tr td.da-actions {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  box-shadow: -1px 0 0 var(--border);
+  text-align: right;
+  white-space: nowrap;
+}
+.da-panel .da-sheet td small {
+  display: block;
+  max-width: 260px;
+  white-space: normal;
+}
+.da-panel h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.da-panel .da-lines {
+  overflow-x: auto;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+/* Inner tables scroll inside their own box, so the outer table's sticky columns must not apply. */
+.da-panel .da-lines th,
+.da-panel .da-lines td,
+.da-panel .da-lines tbody tr:nth-child(n) td {
+  position: static;
+  text-align: left;
+  box-shadow: none;
+}
+.da-panel .da-lines tbody tr:last-child td {
+  border-bottom: 0;
+}
+.da-panel .da-lines tbody tr:nth-child(n):not(:hover) td {
+  background: var(--card);
+}
+/* The divider spans the panel; only the small table inside is held narrow. */
+.da-panel .da-abstract {
+  padding: 16px 20px 20px;
+  border-top: 1px solid var(--border);
+}
+.da-panel .da-abstract .da-lines {
+  max-width: 560px;
+}
+/* The totals sit flush between the table and the pager, so the dividers run unbroken. */
+.da-panel .pay-summary {
+  margin: 0;
+  border-width: 1px 0 0;
+  border-style: solid;
+  border-color: var(--border);
+  border-radius: 0;
+  box-shadow: none;
+}
+.da-panel .table-footer.pager {
+  border-top: 1px solid var(--border);
+}
+.da-panel .da-grand-total td {
+  font-weight: 700;
+}
+.da-form {
+  display: grid;
+  gap: 16px;
+  background: var(--background);
+}
+.da-form .tpt-entry-card {
+  background: var(--card);
+}
+.da-tranches {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  margin-top: 16px;
+}
+.da-tranche {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 18px;
+  align-items: start;
+  width: 100%;
+}
+.da-tranche .da-remove {
+  margin-top: 26px;
+}
+/* Only an entry with several amounts has a delete button, so room is kept for it only then. */
+@media (min-width: 701px) {
+  .da-tranche:has(.da-remove) {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) 36px;
+  }
+}
+/* The shared icon rule for typed dropdowns would push a clear button's icon out of line
+   (BE Closure Status, Payment Status and any other clearable dropdown on this form). */
+.da-form .combo-input .ctl-clear {
+  top: 50%;
+}
+.da-form .combo-input .ctl-clear svg {
+  position: static;
+}
+.da-form .da-add-line {
+  justify-self: start;
+}
+.da-checks {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 32px;
+  margin: 0;
+}
+.da-checks dt {
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.da-checks dd {
+  margin: 4px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+/* Duty check's Enhancement amount checkbox: the shared checkbox card, sized to sit in line with the inputs
+   beside it (an empty label keeps it level with their labels). */
+.da-check-field .doc-checkbox-card {
+  align-items: center;
+  height: 38px;
+  padding: 0 12px;
+}
+.da-check-field .doc-checkbox-card input[type="checkbox"] {
+  margin-top: 0;
+}
+.da-check-field .doc-checkbox-title {
+  font-size: 12px;
+}
+/* A BE line's container breakdown: one box per container, under Number of Containers. */
+.da-containers {
+  grid-column: 1 / -1;
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+.da-containers.has-error {
+  border-color: var(--destructive);
+}
+.da-containers-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.da-containers-head strong {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+.da-container-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 18px;
+  width: 100%;
+}
+.da-container {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  align-items: start;
+}
+.da-container:has(.da-remove) {
+  grid-template-columns: minmax(0, 1fr) 36px;
+}
+.da-container .da-remove {
+  margin-top: 26px;
+}
+.da-containers-error {
+  margin: 0;
+  font-size: 11px;
+  color: var(--destructive);
+}
+/* The register lists a line's containers one under another. */
+.da-ctr-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 3px;
+}
+@media (max-width: 700px) {
+  /* One column on phones: nothing beside the checkbox to line up with. */
+  .da-check-field > .field-label {
+    display: none;
+  }
+  .da-container-grid {
+    grid-template-columns: 1fr;
+  }
+  .da-form .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .da-tranche {
+    grid-template-columns: 1fr;
+  }
+  .da-tranche:has(.da-remove) {
+    grid-template-columns: 1fr 36px;
+  }
+  .da-tranche .da-remove {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .da-tranche > .field {
+    grid-column: 1;
+  }
+}
