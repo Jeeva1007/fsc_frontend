@@ -289,6 +289,8 @@ export type UserRow = {
   location?: string;
   linkedCode?: string;
   entityCode?: string;
+  /** A Receiver's free-text payment alert, once the backend returns it. */
+  paymentAlert?: string;
   partyId?: number;
   shipperId?: number;
   chaId?: number;
@@ -346,6 +348,11 @@ export type UserRequest = {
   location?: string;
   active?: boolean;
   paymentAlertDays?: number;
+  /**
+   * A Receiver's "Payment alert", free text (user request, 2026-11-16). Not in the backend's
+   * UserManagementRequest yet (it has only the whole-number `paymentAlertDays`); the backend must add it.
+   */
+  paymentAlert?: string;
   commercialTerms?: string;
   eta?: string;
   warehouses?: WarehouseRequest[];

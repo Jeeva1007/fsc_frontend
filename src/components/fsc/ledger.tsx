@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowLeftRight,
   ChevronDown,
@@ -20,11 +20,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Badge, SearchInput, TextField } from "./fields";
+import { Badge, TextField } from "./fields";
 import { useMasterOptions } from "./receiver-directory";
-import { RobContainers, RobStatement, Totals } from "./rob-ledger-tables";
-import { contains, usePages } from "./ledger-table-utils";
-import { TablePagination } from "./table-pagination";
+import { RobContainers, RobStatement } from "./rob-ledger-tables";
 import { dropdownId } from "@/lib/shipment-create";
 import {
   useShipperContainersQuery,
@@ -40,6 +38,7 @@ import { blankDeal, blankEntry, initialDeals, type Deal } from "./ledger-data";
 import { LEDGER_ENTRY_TAB, useLedgerEntry } from "./ledger-entry";
 import type { DebitAdvice } from "@/lib/debit-advice";
 import type { LedgerServerPage } from "@/lib/page";
+import { useStoredView } from "@/lib/stored-view";
 function ShipperLedger({
   shipper,
   shipments,
@@ -53,9 +52,16 @@ function ShipperLedger({
   entries?: import("@/lib/fsc-finance").LedgerEntry[];
   onEntries?: (e: import("@/lib/fsc-finance").LedgerEntry[]) => void;
 }) {
-  const [view, setView] = useState("Statements");
+  // A ledger opened from "Select Shipper" (isAdmin) has no Containers tab (user request, 2026-11-16); a
+  // signed-in shipper's own ledger keeps it.
+  const tabs = isAdmin ? ["Statements", "Add TPT Entry"] : ["Statements", "Containers"];
+  // The open tab survives a page refresh (user request, 2026-11-16).
+  const [view, setView] = useStoredView(
+    isAdmin ? "ledger.shipperView" : "ledger.ownView",
+    "Statements",
+    (v) => tabs.includes(v),
+  );
   const [entry, setEntry] = useState(blankEntry);
-  const [shipQuery, setShipQuery] = useState("");
   // The shipper's UUID feeds the live /shipperAccount endpoints; resolved from the shipper dropdown.
   const master = useMasterOptions();
   const shipperId = dropdownId(master, "shippers", shipper.code);
@@ -80,15 +86,9 @@ function ShipperLedger({
         agv: summary.agvMissingCount
           ? `${plural(summary.agvMissingCount, "container")} without AGV`
           : "AGV recorded on every container",
-        gsm: `${plural(summary.gsmPaymentCount ?? 0, "GSM payment")}${
-          summary.averageGsmPerContainer
-            ? ` · ${money(summary.averageGsmPerContainer)} avg per container`
-            : ""
-        }`,
-        tpt: `Of ${money(summary.totalTransfers ?? 0)} received in ${plural(
-          summary.transferCount ?? 0,
-          "transfer",
-        )}`,
+        // The average per container and the transfer count were dropped (user request, 2026-11-16).
+        gsm: plural(summary.gsmPaymentCount ?? 0, "GSM payment"),
+        tpt: `Of ${money(summary.totalTransfers ?? 0)}`,
       }
     : {
         count: "Active and master records",
@@ -96,66 +96,6 @@ function ShipperLedger({
         gsm: "Recorded shipment payments",
         tpt: "Recorded shipment transfers",
       };
-  // The Statements tab's summary table ("Statement", Design A) binds GET /shipperAccount/statement: one row
-  // per line. A CHARGE fills AGV, a GSM payment GSM Paid, a TPT payment TPT Used, a direct OX payment
-  // Direct OX Paid. Before the call loads it falls back to the local shipment records. RTK caches this
-  // query, so the running-balance statement below reuses the one request.
-  const { data: statement } = useShipperStatementQuery(
-    { shipperId: shipperId ?? "" },
-    { skip: !shipperId },
-  );
-  type AccountRow = {
-    key: string;
-    vase: string;
-    dos: string;
-    eta: string;
-    desc: string;
-    agv: string;
-    gsm: string;
-    tp: string;
-    ox: string;
-  };
-  const liveStatement = Boolean(statement?.transactions?.length);
-  const accountRows = useMemo<AccountRow[]>(() => {
-    if (statement?.transactions?.length) {
-      return statement.transactions.map((t, i) => {
-        const kind = paymentKind(t.transactionType);
-        const file = t.shipment?.fileLabel || t.shipment?.fileNo || "";
-        // A CHARGE line carries the container's AGV in `charge`; a payment carries its amount in `paid`.
-        const paid = String(t.paid ?? 0);
-        return {
-          key: t.transactionId || `${t.serialNo ?? ""}-${i}`,
-          vase: t.shipment?.containerNumber || file || "—",
-          dos: file || "—",
-          eta: t.transactionDate ?? "—",
-          desc: t.description || "—",
-          agv: kind === "CHARGE" ? String(t.charge ?? 0) : "0",
-          gsm: kind === "GSM" ? paid : "0",
-          tp: kind === "TPT" ? paid : "0",
-          ox: kind === "OX" ? paid : "0",
-        };
-      });
-    }
-    return ownShipments.map((s) => ({
-      key: s.vase,
-      vase: s.vase,
-      dos: s.dos,
-      eta: s.eta,
-      desc: s.desc,
-      agv: s.agv,
-      gsm: s.gsm,
-      tp: s.tptReserved ?? s.tp,
-      ox: "0",
-    }));
-  }, [statement, ownShipments]);
-  // Live rows carry the line's date (a payment's date, or a container's arrival); the fallback the ETA.
-  const dateHead = liveStatement ? "Date" : "ETA";
-  // The Statement summary table (search, totals strip, pagination).
-  const shipRows = accountRows.filter((s) => contains([s.vase, s.dos, s.eta, s.desc], shipQuery));
-  const { visible: shipVisible, reset: shipReset, pagination: shipPagination } = usePages(shipRows);
-  // A ledger opened from "Select Shipper" (isAdmin) has no Containers tab (user request, 2026-11-16); a
-  // signed-in shipper's own ledger keeps it.
-  const tabs = isAdmin ? ["Statements", "Add TPT Entry"] : ["Statements", "Containers"];
   return (
     <>
       <h2 className="ledger-title">{shipper.name} Ledger</h2>
@@ -225,133 +165,7 @@ function ShipperLedger({
           <ContainersAccount shipments={ownShipments} shipperId={shipperId} />
         </>
       ) : (
-        <>
-          <div className="panel shipments-panel rob-panel">
-            <div className="panel-header">
-              <h2>
-                Statement <span className="count">{accountRows.length}</span>
-              </h2>
-              <p>Design A · summary table</p>
-            </div>
-            <div className="table-toolbar">
-              <SearchInput
-                placeholder="Search shipments…"
-                value={shipQuery}
-                onChange={(v) => {
-                  setShipQuery(v);
-                  shipReset();
-                }}
-              />
-              {shipQuery && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setShipQuery("");
-                    shipReset();
-                  }}
-                >
-                  Clear
-                </Button>
-              )}
-              <div className="toolbar-end">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    exportTable({
-                      fileName: `${shipper.code.toLowerCase()}-ledger`,
-                      title: `${shipper.name} Ledger`,
-                      columns: [
-                        "Container",
-                        "File Number",
-                        "Description",
-                        { header: "AGV", type: "money", total: true },
-                        { header: dateHead, type: "date" },
-                        { header: "GSM Paid", type: "money", total: true },
-                        { header: "TPT Used", type: "money", total: true },
-                        { header: "Direct OX Paid", type: "money", total: true },
-                      ],
-                      rows: shipRows.map((s) => [
-                        s.vase,
-                        s.dos,
-                        s.desc,
-                        s.agv,
-                        s.eta,
-                        s.gsm,
-                        s.tp,
-                        s.ox,
-                      ]),
-                      totalsLabel: "Total",
-                    })
-                  }
-                >
-                  <Download />
-                  Export
-                </Button>
-              </div>
-            </div>
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    {[
-                      "Container",
-                      "File Number",
-                      "Description",
-                      "AGV",
-                      dateHead,
-                      "GSM Paid",
-                      "TPT Used",
-                      "Direct OX Paid",
-                    ].map((h) => (
-                      <th key={h}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {shipVisible.map((s) => (
-                    <tr key={s.key}>
-                      <td className="font-semibold">{s.vase}</td>
-                      <td>{s.dos || "—"}</td>
-                      <td className="rob-desc">{s.desc || "—"}</td>
-                      <td>{money(s.agv)}</td>
-                      <td>{s.eta || "—"}</td>
-                      <td>{money(s.gsm)}</td>
-                      <td>{money(s.tp)}</td>
-                      <td>{money(s.ox)}</td>
-                    </tr>
-                  ))}
-                  {!shipRows.length && (
-                    <tr>
-                      <td colSpan={8} className="empty-state">
-                        {accountRows.length ? "No matching shipments" : "No ledger records yet."}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <Totals
-              label="Shipment totals"
-              items={[
-                ["AGV", money(shipRows.reduce((sum, s) => sum + (Number(s.agv) || 0), 0))],
-                ["GSM Paid", money(shipRows.reduce((sum, s) => sum + (Number(s.gsm) || 0), 0))],
-                [
-                  "TPT Used",
-                  money(shipRows.reduce((sum, s) => sum + (Number(s.tp) || 0), 0)),
-                  "pay-remaining",
-                ],
-                [
-                  "Direct OX Paid",
-                  money(shipRows.reduce((sum, s) => sum + (Number(s.ox) || 0), 0)),
-                ],
-              ]}
-            />
-            <TablePagination {...shipPagination} noun="shipments" />
-          </div>
-          <ShipperStatement shipper={shipper} shipments={ownShipments} shipperId={shipperId} />
-        </>
+        <ShipperStatement shipper={shipper} shipments={ownShipments} shipperId={shipperId} />
       )}
     </>
   );
@@ -543,7 +357,8 @@ function statementTitle(
 }
 
 /**
- * Statements tab · Design B (under Design A so the client can compare the two layouts). With the live reply
+ * Statements tab: the only table there since Design A (the summary table) was removed (user request,
+ * 2026-11-16). With the live reply
  * (GET /shipperAccount/statement) it lists the shipper's payments in date order — GSM, TPT and direct OX —
  * with the running total paid between the "brought forward" and "carried forward" rows. Before the call
  * loads (or with no shipper UUID) it shows the local running-balance view: AGV charges less payments.
@@ -604,7 +419,7 @@ function PaymentStatement({
       <div className="panel-header">
         <h2>Statement · {shipper.name}</h2>
         <p>
-          Newest first — container charges increase the balance, GSM, TPT and direct OX payments
+          Newest first — container charges increase the balance, GSM, TPT / direct OX payments
           reduce it
         </p>
       </div>
@@ -868,8 +683,23 @@ export function Ledger({
       }
     | undefined;
 }) {
-  const [tab, setTab] = useState("GSM - OX Deal Ledger");
+  // The open tab or picked shipper survives a page refresh (user request, 2026-11-16).
+  const [tab, setTab] = useStoredView(
+    "ledger.tab",
+    "GSM - OX Deal Ledger",
+    (v) =>
+      v === "GSM - OX Deal Ledger" ||
+      (v === LEDGER_ENTRY_TAB && Boolean(ledgerEntry)) ||
+      v.endsWith(" Account Ledger"),
+  );
   const master = useMasterOptions();
+  // Once the shipper list has loaded, a remembered shipper that is no longer in it falls back to the deals.
+  useEffect(() => {
+    const shippers = master?.["shippers"];
+    if (!shippers?.length || !tab.endsWith(" Account Ledger")) return;
+    const offered = shippers.map((o) => `${(o.code || o.name || "").trim()} Account Ledger`);
+    if (!offered.includes(tab)) setTab("GSM - OX Deal Ledger");
+  }, [master, tab, setTab]);
   // GSM - OX Deal Ledger cards (Owner); not fetched for a shipper's own ledger view (403 for that role).
   const { data: ledgerCards } = useLedgerCardsQuery(undefined, { skip: Boolean(shipper) });
   const {
@@ -885,7 +715,11 @@ export function Ledger({
     showTable: () => setTab("GSM - OX Deal Ledger"),
     ...(ledgerEntry?.serverPage ? { serverPage: ledgerEntry.serverPage } : {}),
   });
-  const [robView, setRobView] = useState("Statement");
+  const [robView, setRobView] = useStoredView(
+    "ledger.robView",
+    "Statement",
+    (v) => v === "Statement" || v === "Add TPT Entry",
+  );
   const [dealView, setDealView] = useState("Deals");
   const [entry, setEntry] = useState(blankEntry);
   const [deals, setDeals] = useState(initialDeals);

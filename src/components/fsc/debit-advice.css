@@ -169,7 +169,7 @@
 .da-check-field .doc-checkbox-title {
   font-size: 12px;
 }
-/* A BE line's container breakdown: one box per container, under Number of Containers. */
+/* A BE line's Container(s) section: one box per container, under Number of Containers. */
 .da-containers {
   grid-column: 1 / -1;
   display: grid;

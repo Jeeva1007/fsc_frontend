@@ -42,6 +42,8 @@ export type User = {
   password: string;
   /** Receivers only: one or more warehouses with contact details. */
   warehouses?: Warehouse[];
+  /** Receivers only: the "Payment alert" note, free text (user request, 2026-11-16). */
+  paymentAlert?: string;
   /** Set on members loaded from GET /users (the server never returns passwords): a UUID on the local backend. */
   serverId?: number | string;
   email?: string;
