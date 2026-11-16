@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useStoredView } from "@/lib/stored-view";
 import { LedgerCards } from "./ledger-cards";
 import { dealLedgerStats, statCards } from "./ledger-card-items";
 import { useLedgerCardsQuery } from "@/store/api/ledger.api";
@@ -27,7 +27,12 @@ export function AccountantLedger({
   onDebitAdvices: (advices: DebitAdvice[]) => void;
   ledgerPage?: LedgerServerPage;
 }) {
-  const [tab, setTab] = useState(DEAL_TAB);
+  // The open tab survives a page refresh (user request, 2026-11-16).
+  const [tab, setTab] = useStoredView(
+    "ledger.accountantTab",
+    DEAL_TAB,
+    (v) => v === DEAL_TAB || v === LEDGER_ENTRY_TAB,
+  );
   const { form, table, openNew } = useLedgerEntry({
     entries,
     onEntries,

@@ -15,6 +15,8 @@ export const USER_LIMITS = {
   email: 160,
   location: 120,
   password: 72,
+  /** A Receiver's free-text Payment alert; the backend has no limit yet, 255 matches a usual text column. */
+  paymentAlert: 255,
 } as const;
 
 const text = (label: string, max: number) =>

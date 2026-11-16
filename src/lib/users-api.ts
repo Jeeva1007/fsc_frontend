@@ -98,6 +98,9 @@ export function fromUserRow(row: UserRow, options?: MasterOptions): User {
       ? { linked: text(row.linkedCode) || text(row.entityCode) }
       : {}),
     ...(warehouses.length ? { warehouses } : {}),
+    ...(role === "Receiver" && text(row.paymentAlert)
+      ? { paymentAlert: text(row.paymentAlert) }
+      : {}),
     ...(row.partyId !== undefined ? { partyId: row.partyId } : {}),
     ...(row.shipperId !== undefined ? { shipperId: row.shipperId } : {}),
     ...(row.chaId !== undefined ? { chaId: row.chaId } : {}),
@@ -141,6 +144,8 @@ export function toUserRequest(u: User, password: string, options?: MasterOptions
     location: location || undefined,
     active: (u.status || "Active") !== "Inactive",
     warehouses: u.role === "Receiver" && warehouses.length ? warehouses : undefined,
+    // Receivers only, and only when typed, so other members' requests are exactly as before.
+    paymentAlert: u.role === "Receiver" ? u.paymentAlert?.trim() : undefined,
     portIds: podId ? [podId] : undefined,
   };
   return Object.fromEntries(

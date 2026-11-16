@@ -790,6 +790,17 @@ export function UserManagement({
                       inputProps={{ autoComplete: "off" }}
                     />
                   )}
+                  {/* Receivers only (user request, 2026-11-16): free text, one full-width input under their details. */}
+                  {user.role === "Receiver" && (
+                    <TextField
+                      label="Payment alert"
+                      wide
+                      value={user.paymentAlert ?? ""}
+                      onChange={(v) => setUser({ ...user, paymentAlert: v })}
+                      placeholder="Enter payment alert"
+                      inputProps={{ autoComplete: "off", maxLength: USER_LIMITS.paymentAlert }}
+                    />
+                  )}
                 </div>
               )}
               {user.role === "Receiver" && whLoad && !whLoad.error && (
