@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { Calculator, Plus, Receipt, Ship, Trash2, Wallet } from "lucide-react";
+import { Calculator, Plus, Receipt, Trash2, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { snackbar } from "@/components/ui/snackbar";
 import { currencyOptions } from "@/lib/currencies";
@@ -17,7 +17,6 @@ import {
   FRUITS,
   PARTY_NAMES,
   PAYMENT_STATUSES,
-  PORT_CODES,
   TPT_NAMES,
   validateDebitAdvice,
   withoutEmptyRows,
@@ -30,6 +29,10 @@ import type { FieldErrors } from "@/lib/login-schema";
 import { Combo, TextField } from "./fields";
 import { useMasterOptions } from "./receiver-directory";
 import { receiverNameChoices, shipperNameChoices } from "@/lib/master-choices";
+
+/** A BE line card's title (user request, 2026-11-16): numbered only when the entry has more than one. */
+const lineTitle = (index: number, count: number) =>
+  count > 1 ? `BL/BE Information ${index + 1}` : "BL/BE Information";
 
 /**
  * The Add Ledger Entry tab: one debit advice, its amounts, then one card per BE with its TPT payment and duty
@@ -168,8 +171,8 @@ export function DebitAdviceForm({
         <div>
           <h2>{isNew ? "Add Ledger Entry" : "Edit Ledger Entry"}</h2>
           <p>
-            Fill in the debit advice, the BE lines, or both. Amounts paid to a shipper become
-            available in shipment payments.
+            Fill in the debit advice, the BL/BE information, or both. Amounts paid to a shipper
+            become available in shipment payments.
           </p>
         </div>
       </div>
@@ -267,12 +270,12 @@ export function DebitAdviceForm({
                 ref={i === form.lines.length - 1 ? lastCard : null}
               >
                 <div className="tpt-entry-head">
-                  <span>BE line {i + 1}</span>
+                  <span>{lineTitle(i, form.lines.length)}</span>
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    aria-label={`Remove BE line ${i + 1}`}
+                    aria-label={`Remove ${lineTitle(i, form.lines.length)}`}
                     onClick={() =>
                       setForm((f) => ({ ...f, lines: f.lines.filter((x) => x.id !== line.id) }))
                     }
@@ -281,12 +284,14 @@ export function DebitAdviceForm({
                   </Button>
                 </div>
                 <div className="form-grid">
-                  <div className="form-section-title">
-                    <Ship />
-                    Shipment and BE
-                  </div>
                   <TextField label="BL No." {...field("blNo")} />
-                  <Combo label="Port Code" options={PORT_CODES} {...field("portCode")} />
+                  {/* Free text (user request, 2026-11-16); the backend keeps at most 10 characters. */}
+                  <TextField
+                    label="Port Code"
+                    placeholder="e.g. INNSA1"
+                    inputProps={{ maxLength: 10, autoComplete: "off", spellCheck: false }}
+                    {...field("portCode")}
+                  />
                   <TextField label="BE No." {...field("beNo")} />
                   <TextField label="BE Date" type="date" {...field("beDate")} />
                   <Combo
@@ -345,6 +350,7 @@ export function DebitAdviceForm({
                   <ContainerBreakdown
                     line={line}
                     index={i}
+                    title={lineTitle(i, form.lines.length)}
                     errors={errors}
                     onChange={(update) => updateLine(i, update)}
                   />
@@ -372,7 +378,7 @@ export function DebitAdviceForm({
                     <Calculator />
                     Duty check
                   </div>
-                  <TextField label="Duty paid (BE)" type="number" {...field("dutyPaid")} />
+                  <TextField label="Paid" type="number" {...field("dutyPaid")} />
                   <div className="field da-check-field">
                     <span className="field-label" aria-hidden="true">
                       &nbsp;
@@ -419,7 +425,7 @@ export function DebitAdviceForm({
             }}
           >
             <Plus />
-            Add BE Line
+            Add BL/BE Information
           </Button>
           <section className="tpt-entry-card">
             <div className="form-grid">
@@ -477,11 +483,13 @@ export function DebitAdviceForm({
 function ContainerBreakdown({
   line,
   index,
+  title,
   errors,
   onChange,
 }: {
   line: BeLine;
   index: number;
+  title: string;
   errors: FieldErrors;
   onChange: (update: (line: BeLine) => BeLine) => void;
 }) {
@@ -492,7 +500,8 @@ function ContainerBreakdown({
   return (
     <div className={`da-containers${hasError ? " has-error" : ""}`}>
       <div className="da-containers-head">
-        <span>Container breakdown</span>
+        {/* Singular for one box, plural for more (user request, 2026-11-16). */}
+        <span>{slots.length === 1 ? "Container" : "Containers"}</span>
         <strong>
           {listed} {listed === 1 ? "container number" : "container numbers"}
         </strong>
@@ -514,7 +523,7 @@ function ContainerBreakdown({
                 variant="ghost"
                 size="icon"
                 className="da-remove"
-                aria-label={`Remove container ${j + 1} of BE line ${index + 1}`}
+                aria-label={`Remove container ${j + 1} of ${title}`}
                 onClick={() => onChange((l) => removeContainerSlot(l, j))}
               >
                 <Trash2 />

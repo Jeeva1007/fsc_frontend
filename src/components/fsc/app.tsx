@@ -278,6 +278,9 @@ export function FscApp({ screen }: { screen: Screen }) {
   const active = useMemo(() => activeShipments(master), [master]);
   const delivered = useMemo(() => deliveredShipments(master), [master]);
   const [selected, setSelected] = useState<Shipment | null>(null);
+  // Bumped by each Ledger menu click: the ledger remounts on its first tab, even when already open (user
+  // request, 2026-11-16). Only a page refresh brings back the tab that was open (see stored-view.ts).
+  const [ledgerVisit, setLedgerVisit] = useState(0);
   // Mirrors GET /shipments/shipmentList into the tables. The server rows are the source of truth; any row
   // still only on screen (no serverUuid, and no server row for the same container) is kept so nothing the
   // user just added disappears before it is saved.
@@ -667,6 +670,7 @@ export function FscApp({ screen }: { screen: Screen }) {
   const robTpt = latestTransferAmount(ledgerEntries);
   const displayScreen = canAccess(role, screen) ? screen : "dashboard";
   const go = (next: Screen) => {
+    if (next === "ledger") setLedgerVisit((n) => n + 1);
     setSelected(null);
     setSearch("");
     setAccount(false);
@@ -1272,6 +1276,7 @@ export function FscApp({ screen }: { screen: Screen }) {
                         )}
                         {displayScreen === "ledger" && role === "accountant" && (
                           <AccountantLedger
+                            key={ledgerVisit}
                             entries={ledgerEntries}
                             onEntries={setLedgerEntries}
                             debitAdvices={debitAdvices}
@@ -1281,6 +1286,7 @@ export function FscApp({ screen }: { screen: Screen }) {
                         )}
                         {displayScreen === "ledger" && role !== "accountant" && (
                           <Ledger
+                            key={ledgerVisit}
                             entries={ledgerEntries}
                             onEntries={setLedgerEntries}
                             shipments={master}

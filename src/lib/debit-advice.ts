@@ -88,7 +88,6 @@ export const blankReconciliation = (): Reconciliation => ({
 /** The values the client's sheet uses. Each list also accepts a new value. */
 export const PARTY_NAMES = ["GSM", "Big Apple Farms"];
 export const BE_PARTIES = ["GSM Sarl", "Big Apple Farms"];
-export const PORT_CODES = ["INNSA1", "INMAA1", "INENR1", "INCCU1", "INPJN6"];
 export const TPT_NAMES = [
   "The Fresh Connection",
   "Waipawa",
@@ -354,7 +353,7 @@ export const debitAdviceDisplayOrder = (advices: DebitAdvice[]) => [
 ];
 
 /**
- * Which worked-out figures a line can show. The form now takes only Duty paid (BE), so a new line has no
+ * Which worked-out figures a line can show. The form now takes only Duty paid (BE), labelled "Paid", so a new line has no
  * Ass. or Inv. Value: without them these figures would be a misleading 0 or the duty alone.
  */
 export const dutyFigures = (l: BeLine) => ({
@@ -519,7 +518,9 @@ export const containerBreakdownSchema = yup.object({
           const earlier = (this.parent as string[]).slice(0, Math.max(j, 0));
           return !v.trim() || !earlier.some((b) => sameNumber(b, v))
             ? true
-            : this.createError({ message: `${v.trim()} is already entered in this BE line.` });
+            : this.createError({
+                message: `${v.trim()} is already entered in this BL/BE information.`,
+              });
         }),
     )
     .default([])
