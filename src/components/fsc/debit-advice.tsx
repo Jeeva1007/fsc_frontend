@@ -36,7 +36,7 @@ import type { LedgerEntry } from "@/lib/fsc-finance";
 import { FilterSelect, SearchInput } from "./fields";
 import { TablePagination } from "./table-pagination";
 import type { LedgerServerPage } from "@/lib/page";
-import { receiverNameChoices, shipperNameChoices } from "@/lib/master-choices";
+import { receiverNameChoices } from "@/lib/master-choices";
 import { useMasterOptions } from "./receiver-directory";
 import "./debit-advice.css";
 
@@ -250,7 +250,13 @@ export function DebitAdviceRegister({
   /** When set, the footer pages through the backend; the loaded page is shown as-is. */
   serverPage?: LedgerServerPage;
 }) {
-  const [query, setQuery] = useState("");
+  // With a server page, search / BE closure / payment status go to the backend (ledgerList `search`,
+  // `beClosureStatus`, `paymentStatus`) and cover every page; without one they filter the rows held here.
+  const [localQuery, setLocalQuery] = useState("");
+  const serverSearch = Boolean(serverPage?.onSearch);
+  const query = serverSearch ? (serverPage?.search ?? "") : localQuery;
+  const setQuery = (v: string) => (serverSearch ? serverPage?.onSearch?.(v) : setLocalQuery(v));
+  const typed = query.trim().length;
   const master = useMasterOptions();
   const [localParty, setLocalParty] = useState("");
   // With a server page the Party filter goes to the backend (ledgerList `party`, every page); without one
@@ -267,21 +273,16 @@ export function DebitAdviceRegister({
       ...(party ? [party] : []),
     ]),
   ].sort((x, y) => x.localeCompare(y));
-  const [localTpt, setLocalTpt] = useState("");
-  // The Shipper filter works like Party: sent to the backend (ledgerList `shipper`) with a server page.
-  const serverTpt = Boolean(serverPage?.onShipper);
-  const tpt = serverTpt ? (serverPage?.shipper ?? "") : localTpt;
-  const setTpt = (v: string) => (serverTpt ? serverPage?.onShipper?.(v) : setLocalTpt(v));
-  // Shipper choices = the shippers (shipperDropdown) plus any Shipper already on the loaded BE lines.
-  const shipperChoices = [
-    ...new Set([
-      ...shipperNameChoices(master, []).choices,
-      ...advices.flatMap((a) => a.lines.map((l) => l.tpt.trim())).filter(Boolean),
-      ...(tpt ? [tpt] : []),
-    ]),
-  ].sort((x, y) => x.localeCompare(y));
-  const [closure, setClosure] = useState("");
-  const [status, setStatus] = useState("");
+  const [localClosure, setLocalClosure] = useState("");
+  const serverClosure = Boolean(serverPage?.onClosure);
+  const closure = serverClosure ? (serverPage?.closure ?? "") : localClosure;
+  const setClosure = (v: string) =>
+    serverClosure ? serverPage?.onClosure?.(v) : setLocalClosure(v);
+  const [localStatus, setLocalStatus] = useState("");
+  const serverStatus = Boolean(serverPage?.onPaymentStatus);
+  const status = serverStatus ? (serverPage?.paymentStatus ?? "") : localStatus;
+  const setStatus = (v: string) =>
+    serverStatus ? serverPage?.onPaymentStatus?.(v) : setLocalStatus(v);
   const [page, setPage] = useState(1);
   // The entry whose Payment Status cell was clicked, to show what it is matched with.
   const [matchView, setMatchView] = useState<DebitAdvice | null>(null);
@@ -297,10 +298,9 @@ export function DebitAdviceRegister({
   const filtered = debitAdviceDisplayOrder(advices).filter(
     (a) =>
       (serverParty || !party || a.partyName === party) &&
-      (serverTpt || !tpt || a.lines.some((l) => l.tpt === tpt)) &&
-      (!closure || a.lines.some((l) => l.closure === closure)) &&
-      (!status || shownPaymentStatus(a) === status) &&
-      JSON.stringify(a).toLowerCase().includes(query.toLowerCase()),
+      (serverClosure || !closure || a.lines.some((l) => l.closure === closure)) &&
+      (serverStatus || !status || shownPaymentStatus(a) === status) &&
+      (serverSearch || JSON.stringify(a).toLowerCase().includes(query.toLowerCase())),
   );
   const pageSize = serverPage ? serverPage.size : size;
   const lastPage = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -322,6 +322,11 @@ export function DebitAdviceRegister({
       </div>
       <div className="table-toolbar">
         <SearchInput placeholder="Search entries…" value={query} {...filter(setQuery)} />
+        {serverSearch && typed === 1 && (
+          <span className="da-search-hint" role="status">
+            Type at least 2 characters to search
+          </span>
+        )}
         <FilterSelect
           ariaLabel="Filter party"
           allLabel="All parties"
@@ -329,13 +334,7 @@ export function DebitAdviceRegister({
           value={party}
           {...filter(setParty)}
         />
-        <FilterSelect
-          ariaLabel="Filter shipper"
-          allLabel="All shippers"
-          options={shipperChoices}
-          value={tpt}
-          {...filter(setTpt)}
-        />
+        {/* No "All shippers" filter (user request, 2026-11-16). */}
         <FilterSelect
           ariaLabel="Filter BE closure status"
           allLabel="All BE closure"
@@ -350,14 +349,13 @@ export function DebitAdviceRegister({
           value={status}
           {...filter(setStatus)}
         />
-        {(query || party || tpt || closure || status) && (
+        {(query || party || closure || status) && (
           <Button
             size="sm"
             variant="ghost"
             onClick={() => {
               setQuery("");
               setParty("");
-              setTpt("");
               setClosure("");
               setStatus("");
               setPage(1);
@@ -408,7 +406,7 @@ export function DebitAdviceRegister({
             <tbody>
               <tr>
                 <td colSpan={HEADS.length} className="empty-state">
-                  No data found
+                  {typed >= 2 ? `No entries match “${query.trim()}”` : "No data found"}
                 </td>
               </tr>
             </tbody>

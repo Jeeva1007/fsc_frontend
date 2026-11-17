@@ -251,3 +251,9 @@
     grid-column: 1;
   }
 }
+
+/* Register search: why nothing changed yet (1 character typed). */
+.da-search-hint {
+  font-size: 11px;
+  color: var(--muted-foreground);
+}

@@ -1,5 +1,12 @@
 import { useState } from "react";
 
+/**
+ * Balance column colour (user request, 2026-11-16): positive green, negative red, zero plain. Used on every
+ * statement Balance cell (shipper, fallback and Rob), opening and closing rows included.
+ */
+export const balanceClass = (n: number) =>
+  `font-semibold${n > 0 ? " amt-positive" : n < 0 ? " amt-negative" : ""}`;
+
 /** True when any of `values`, joined, contains the search query (case-insensitive). */
 export const contains = (values: unknown[], query: string) =>
   values.join(" ").toLowerCase().includes(query.trim().toLowerCase());

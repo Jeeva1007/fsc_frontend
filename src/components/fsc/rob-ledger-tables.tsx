@@ -1,15 +1,15 @@
 import { useState } from "react";
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { money, type Shipment } from "@/lib/fsc";
+import { money } from "@/lib/fsc";
 import { exportTable } from "@/lib/export-table";
 import type { LedgerEntry } from "@/lib/fsc-finance";
 import { FilterSelect, SearchInput } from "./fields";
 import { TablePagination } from "./table-pagination";
-import { contains, usePages } from "./ledger-table-utils";
+import { balanceClass, contains, usePages } from "./ledger-table-utils";
 
 /**
- * The Rob Account Ledger's Statement and Containers tables, in the project's standard table layout
+ * The Rob Account Ledger's Statement table, in the project's standard table layout
  * (header with count, search and filter toolbar, totals strip, pagination), like Shipments and Debit Advice.
  */
 
@@ -149,9 +149,7 @@ export function RobStatement({
                 <td className={e.credit ? "amt-paid" : "rob-none"}>
                   {e.credit ? money(e.credit) : "—"}
                 </td>
-                <td className={`font-semibold ${e.balance < 0 ? "amt-negative" : ""}`}>
-                  {money(e.balance)}
-                </td>
+                <td className={balanceClass(e.balance)}>{money(e.balance)}</td>
               </tr>
             ))}
             {!rows.length && (
@@ -173,132 +171,6 @@ export function RobStatement({
         ]}
       />
       <TablePagination {...pagination} noun="entries" />
-    </div>
-  );
-}
-
-export function RobContainers({
-  shipments,
-  fileName = "rob-containers",
-  title = "Rob Account Ledger · Containers",
-}: {
-  shipments: Shipment[];
-  /** Export file name; defaults to the Rob ledger's. */
-  fileName?: string;
-  /** Export title; defaults to the Rob ledger's. */
-  title?: string;
-}) {
-  const [query, setQuery] = useState("");
-  const rows = shipments.filter((s) => contains([s.vase, s.dos, s.eta, s.desc], query));
-  const { visible, reset, pagination } = usePages(rows);
-  const sum = (pick: (s: Shipment) => unknown) =>
-    money(rows.reduce((total, s) => total + Number(pick(s) || 0), 0));
-  return (
-    <div className="panel shipments-panel rob-panel">
-      <div className="panel-header">
-        <h2>
-          Containers <span className="count">{shipments.length}</span>
-        </h2>
-      </div>
-      <div className="table-toolbar">
-        <SearchInput
-          placeholder="Search containers…"
-          value={query}
-          onChange={(v) => {
-            setQuery(v);
-            reset();
-          }}
-        />
-        {query && (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              setQuery("");
-              reset();
-            }}
-          >
-            Clear
-          </Button>
-        )}
-        <div className="toolbar-end">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() =>
-              exportTable({
-                fileName,
-                title,
-                sheetName: "Containers",
-                columns: [
-                  "Container",
-                  "File number",
-                  { header: "ETA", type: "date" },
-                  "Variety / description",
-                  { header: "AGV", type: "money", total: true },
-                  { header: "GSM advances", type: "money", total: true },
-                  { header: "TPT", type: "money", total: true },
-                ],
-                rows: rows.map((s) =>
-                  [s.vase, s.dos, s.eta, s.desc, s.agv, s.gsm, s.tptReserved].map((v) => v ?? ""),
-                ),
-                totalsLabel: "Total",
-              })
-            }
-          >
-            <Download />
-            Export
-          </Button>
-        </div>
-      </div>
-      <div className="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              {[
-                "Container",
-                "File number",
-                "ETA",
-                "Variety / description",
-                "AGV",
-                "GSM advances",
-                "TPT",
-              ].map((h) => (
-                <th key={h}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {visible.map((s) => (
-              <tr key={s.vase}>
-                <td className="font-semibold">{s.vase}</td>
-                <td>{s.dos || "—"}</td>
-                <td>{s.eta || "—"}</td>
-                <td className="rob-desc">{s.desc || "—"}</td>
-                <td>{money(s.agv)}</td>
-                <td>{money(s.gsm)}</td>
-                <td>{money(s.tptReserved)}</td>
-              </tr>
-            ))}
-            {!rows.length && (
-              <tr>
-                <td colSpan={7} className="empty-state">
-                  No matching containers
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-      <Totals
-        label="Container totals"
-        items={[
-          ["AGV", sum((s) => s.agv)],
-          ["GSM advances", sum((s) => s.gsm)],
-          ["TPT", sum((s) => s.tptReserved), "pay-remaining"],
-        ]}
-      />
-      <TablePagination {...pagination} noun="containers" />
     </div>
   );
 }
