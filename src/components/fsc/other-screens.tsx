@@ -1,5 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { Calendar, Download, Pencil, Plus, Save, Search, Trash2, Users } from "lucide-react";
+import {
+  Calendar,
+  Download,
+  KeyRound,
+  Pencil,
+  Plus,
+  Save,
+  Search,
+  Trash2,
+  Users,
+} from "lucide-react";
 import { snackbar } from "@/components/ui/snackbar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -179,6 +189,7 @@ export function UserManagement({
   saveUser,
   saveWarehouses,
   loadWarehouses,
+  resetAuthenticator,
   server,
   serverPage,
 }: {
@@ -197,6 +208,11 @@ export function UserManagement({
   ) => Promise<WarehouseSaveResult>;
   /** Reads a receiver's warehouses from the server when Edit opens; null when there is no linked receiver. */
   loadWarehouses?: (user: User) => Promise<{ list: Warehouse[] } | { error: string } | null>;
+  /**
+   * Resets a member's Google Authenticator (POST /auth/totp/reset/{id}) so they scan a new QR code at
+   * their next sign-in; resolves to an error message, or null on success. Without it there is no button.
+   */
+  resetAuthenticator?: (user: User) => Promise<string | null>;
   /** When set, search/role/status are controlled by the parent and the rows arrive already filtered. */
   server?: UserServerFilter;
   /** When set, the footer pages through the backend instead of slicing the rows in the browser. */
@@ -227,6 +243,9 @@ export function UserManagement({
   const [roleFilter, setRoleFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [remove, setRemove] = useState<string | null>(null);
+  // The member whose authenticator is being reset, and whether that request is on its way.
+  const [resetting, setResetting] = useState<User | null>(null);
+  const [resetPending, setResetPending] = useState(false);
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(10);
   const [whLoad, setWhLoad] = useState<{ error?: string } | null>(null);
@@ -464,6 +483,17 @@ export function UserManagement({
                     >
                       <Pencil />
                     </Button>
+                    {resetAuthenticator && u.serverId !== undefined && u.serverId !== "" && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Reset Google Authenticator for ${u.name}`}
+                        title="Reset Google Authenticator"
+                        onClick={() => setResetting(u)}
+                      >
+                        <KeyRound />
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="icon"
@@ -887,6 +917,48 @@ export function UserManagement({
               }}
             >
               {saveUser ? "Deactivate" : "Remove"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={Boolean(resetting)}
+        onOpenChange={(v) => {
+          // Stays open while the request runs, so its result is never lost.
+          if (!v && !resetPending) setResetting(null);
+        }}
+      >
+        <DialogContent>
+          <DialogTitle>Reset Google Authenticator?</DialogTitle>
+          <DialogDescription>
+            {resetting?.name} will be asked to scan a new QR code the next time they sign in. Use
+            this when they have lost or replaced their phone.
+          </DialogDescription>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" disabled={resetPending} onClick={() => setResetting(null)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={resetPending}
+              onClick={async () => {
+                if (!resetting || !resetAuthenticator) return;
+                setResetPending(true);
+                try {
+                  const message = await resetAuthenticator(resetting);
+                  if (message) {
+                    snackbar.error("Authenticator not reset", { description: message });
+                    return;
+                  }
+                  snackbar.success("Authenticator reset", {
+                    description: `${resetting.name} will scan a new QR code at their next sign-in.`,
+                  });
+                  setResetting(null);
+                } finally {
+                  setResetPending(false);
+                }
+              }}
+            >
+              {resetPending ? "Resetting…" : "Reset"}
             </Button>
           </div>
         </DialogContent>

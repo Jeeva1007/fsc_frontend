@@ -88,3 +88,49 @@ export function sessionFromMe(me: Me | null | undefined): SessionUser | null {
     status: "Active",
   };
 }
+
+/**
+ * What a POST /auth/login or /auth/totp/verify reply means. When the member's 15-day Google Authenticator
+ * access has run out, login accepts the password but answers `status: "TOTP_SETUP_REQUIRED"` (maybe with
+ * the member's id): that is NOT a session, the member must still enter an authenticator code.
+ */
+export type LoginStep = { kind: "signedIn"; me: Me } | { kind: "totpRequired" };
+
+export function readLoginReply(raw: unknown): LoginStep {
+  const body = unwrapApi(raw);
+  const status =
+    body && typeof body === "object" ? text((body as { status?: unknown }).status) : null;
+  // Only TOTP_* statuses ask for a code. Any other `status` (e.g. a member's "Active") is not a login step.
+  if (status && /^TOTP_/i.test(status)) return { kind: "totpRequired" };
+  return { kind: "signedIn", me: toMe(raw) };
+}
+
+/** POST /auth/totp/setup reply: the QR code to scan (the same one for the whole 15-day cycle). */
+export type TotpSetup = {
+  /** A data: URL or image URL, used directly as the <img> src. */
+  qrCodeImage: string | null;
+  manualEntryKey: string | null;
+  issuer: string | null;
+  accountName: string | null;
+  digits: number;
+  validDays: number | null;
+};
+
+const count = (v: unknown) => (typeof v === "number" && Number.isInteger(v) && v > 0 ? v : null);
+
+// A bare base64 PNG (no "data:" prefix) is turned into a data URL so it still shows.
+const qrSrc = (v: string | null) =>
+  v && v.startsWith("iVBORw0KGgo") ? `data:image/png;base64,${v}` : v;
+
+export function toTotpSetup(raw: unknown): TotpSetup {
+  const body = unwrapApi(raw);
+  const b = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+  return {
+    qrCodeImage: qrSrc(text(b["qrCodeImage"])),
+    manualEntryKey: text(b["manualEntryKey"]),
+    issuer: text(b["issuer"]),
+    accountName: text(b["accountName"]),
+    digits: count(b["digits"]) ?? 6,
+    validDays: count(b["validDays"]),
+  };
+}

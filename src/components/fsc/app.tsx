@@ -42,7 +42,8 @@ import { Ledger } from "./ledger";
 import { AccountantLedger } from "./accountant-ledger";
 import { fromGsmOxLedgerResponse } from "@/lib/debit-advice-api";
 import type { DebitAdvice } from "@/lib/debit-advice";
-import { Login } from "./login";
+import { Login, type SignInResult } from "./login";
+import type { TotpVerifyError } from "./totp-step";
 import { ChaScreen, Meeting, Settings, UserManagement } from "./other-screens";
 import { useWorkspace } from "@/lib/fsc-workspace";
 import { useAppDispatch } from "@/store/hooks";
@@ -73,10 +74,13 @@ import {
   useUpdateUserMutation,
   useLazyGetUserQuery,
   useLoginMutation,
+  useTotpResetMutation,
+  useTotpSetupMutation,
+  useTotpVerifyMutation,
   useLogoutMutation,
   useMeQuery,
 } from "@/store/api";
-import { sessionFromMe } from "@/lib/auth-session";
+import { sessionFromMe, type TotpSetup } from "@/lib/auth-session";
 import { clearStoredMe, writeStoredMe } from "@/lib/session-store";
 import { activeShipments, deliveredShipments } from "@/lib/listing";
 import { shipmentListRows } from "@/lib/shipment-list";
@@ -90,7 +94,7 @@ import {
   toCreateShipmentRequest,
   toUpdateShipmentRequest,
 } from "@/lib/shipment-create";
-import type { ShipmentListArgs, UserListArgs } from "@/types/api";
+import type { Me, ShipmentListArgs, UserListArgs } from "@/types/api";
 import {
   LEDGER_SEARCH_MAX,
   LEDGER_SEARCH_MIN,
@@ -169,6 +173,9 @@ export function FscApp({ screen }: { screen: Screen }) {
   const { preferences } = useWorkspace();
   const dispatch = useAppDispatch();
   const [loginRequest] = useLoginMutation();
+  const [totpSetupRequest] = useTotpSetupMutation();
+  const [totpVerifyRequest] = useTotpVerifyMutation();
+  const [totpResetRequest] = useTotpResetMutation();
   const [logoutRequest] = useLogoutMutation();
   // The server session (cookie) is the only source of who is signed in and with which role.
   const { data: me, isLoading: meLoading } = useMeQuery();
@@ -857,20 +864,66 @@ export function FscApp({ screen }: { screen: Screen }) {
   // Signs in via POST /auth/login; resolves to an error message, or null on success.
   // Set by a successful sign-in; the app then opens the first item of that role's menu.
   const justSignedIn = useRef(false);
-  const signIn = async (username: string, password: string) => {
+  // Stores a signed-in reply (me cache + sessionStorage) and opens the role's first screen. Shared by the
+  // password login and the Google Authenticator step; false when the reply carries no signed-in member.
+  const completeSignIn = (signedIn: Me) => {
+    if (!sessionFromMe(signedIn)) return false;
+    // Open the first menu item once the signed-in role is known (see the effect after navKeys).
+    justSignedIn.current = true;
+    dispatch(authApi.util.upsertQueryData("me", undefined, signedIn));
+    writeStoredMe(signedIn); // persist so a refresh keeps the session
+    return true;
+  };
+  const signIn = async (username: string, password: string): Promise<SignInResult> => {
     const result = await loginRequest({ username, password });
     if ("error" in result) {
       const status = (result.error as { status?: unknown }).status;
-      if (status === 400 || status === 401) return "Username or Password is incorrect.";
-      if (status === 403) return "Sign-in was rejected. Refresh the page and try again.";
-      if (status === 429) return "Too many attempts. Please wait and try again.";
-      return "Unable to reach the server. Please try again.";
+      if (status === 400 || status === 401) return { error: "Username or Password is incorrect." };
+      if (status === 403) return { error: "Sign-in was rejected. Refresh the page and try again." };
+      if (status === 429) return { error: "Too many attempts. Please wait and try again." };
+      return { error: "Unable to reach the server. Please try again." };
     }
-    if (!sessionFromMe(result.data)) return "Username or Password is incorrect.";
-    // Open the first menu item once the signed-in role is known (see the effect after navKeys).
-    justSignedIn.current = true;
-    dispatch(authApi.util.upsertQueryData("me", undefined, result.data));
-    writeStoredMe(result.data); // persist so a refresh keeps the session
+    // The password was right but the 15-day authenticator access ran out: not signed in yet.
+    if (result.data.kind === "totpRequired") return "totpRequired";
+    if (!completeSignIn(result.data.me)) return { error: "Username or Password is incorrect." };
+    return "signedIn";
+  };
+  // POST /auth/totp/setup: the QR code for the authenticator step.
+  const loadTotpSetup = async (): Promise<TotpSetup | { error: string }> => {
+    const result = await totpSetupRequest();
+    if ("error" in result) {
+      const status = (result.error as { status?: unknown }).status;
+      if (status === 401) return { error: "Your sign-in timed out. Go back and sign in again." };
+      return { error: describeApiError(result.error) };
+    }
+    return result.data;
+  };
+  // POST /auth/totp/verify; null once signed in. `restart` sends the member back to the password form.
+  const verifyTotp = async (code: string): Promise<TotpVerifyError | null> => {
+    const result = await totpVerifyRequest({ code });
+    if ("error" in result) {
+      const status = (result.error as { status?: unknown }).status;
+      if (status === 400) return { error: "That code is not right. Try the current code." };
+      if (status === 401)
+        return { error: "Too many tries or the time ran out. Sign in again.", restart: true };
+      if (status === 429) return { error: "Too many attempts. Please wait and try again." };
+      return { error: describeApiError(result.error) };
+    }
+    if (result.data.kind !== "signedIn" || !completeSignIn(result.data.me))
+      return { error: "Verification did not finish. Sign in again.", restart: true };
+    return null;
+  };
+  // POST /auth/totp/reset/{id} (owner): the member scans a new QR code at their next sign-in.
+  const resetAuthenticator = async (member: User): Promise<string | null> => {
+    if (member.serverId === undefined || member.serverId === "")
+      return "This member cannot be reset from here.";
+    const result = await totpResetRequest(member.serverId);
+    if ("error" in result) {
+      const status = (result.error as { status?: unknown }).status;
+      if (status === 403) return "Only the owner can reset a member's authenticator.";
+      if (status === 404) return "This member was not found on the server.";
+      return describeApiError(result.error);
+    }
     return null;
   };
   // POST /auth/password for the forced first-login change; resolves to an error message, or null on success.
@@ -934,7 +987,8 @@ export function FscApp({ screen }: { screen: Screen }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiUser, firstMenu]);
   if (meLoading) return null;
-  if (!apiUser) return <Login onLogin={signIn} />;
+  if (!apiUser)
+    return <Login onLogin={signIn} onTotpSetup={loadTotpSetup} onTotpVerify={verifyTotp} />;
   if (mustChangePassword)
     return <ChangePassword name={apiUser.name} onSubmit={changePassword} onSignOut={logout} />;
   return (
@@ -1346,6 +1400,7 @@ export function FscApp({ screen }: { screen: Screen }) {
                             setUsers={setUsers}
                             saveUser={saveUser}
                             loadWarehouses={loadWarehouses}
+                            resetAuthenticator={resetAuthenticator}
                             server={userServerFilter}
                             serverPage={userServerPage}
                           />
