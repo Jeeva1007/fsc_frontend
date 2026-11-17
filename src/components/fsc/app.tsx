@@ -91,7 +91,12 @@ import {
   toUpdateShipmentRequest,
 } from "@/lib/shipment-create";
 import type { ShipmentListArgs, UserListArgs } from "@/types/api";
-import type { LedgerServerPage, ServerPage } from "@/lib/page";
+import {
+  LEDGER_SEARCH_MAX,
+  LEDGER_SEARCH_MIN,
+  type LedgerServerPage,
+  type ServerPage,
+} from "@/lib/page";
 import {
   extractPaymentRecords,
   fromPaymentRecord,
@@ -326,14 +331,32 @@ export function FscApp({ screen }: { screen: Screen }) {
   const [ledgerUiPage, setLedgerUiPage] = useState(1);
   // The register's Party filter is sent as ledgerList `party` (Party Name), so it covers every page.
   const [ledgerParty, setLedgerParty] = useState("");
-  // …and its Shipper filter as ledgerList `shipper` (Shipper of any BE line).
-  const [ledgerShipper, setLedgerShipper] = useState("");
+  // Search, BE closure and payment status also go to the server (user request, 2026-11-16), so they cover
+  // every page instead of only the 10 rows on screen.
+  const [ledgerClosure, setLedgerClosure] = useState("");
+  const [ledgerStatus, setLedgerStatus] = useState("");
+  // The search box as typed; sent 300 ms after typing stops, and only at 2 to 50 characters (ledgerList
+  // rejects other lengths). One character searches nothing yet, so the list stays as it was.
+  const [ledgerSearchText, setLedgerSearchText] = useState("");
+  const [ledgerSearch, setLedgerSearch] = useState("");
+  useEffect(() => {
+    const id = setTimeout(() => {
+      const t = ledgerSearchText.trim();
+      const next = t.length >= LEDGER_SEARCH_MIN ? t.slice(0, LEDGER_SEARCH_MAX) : "";
+      setLedgerSearch(next);
+    }, 300);
+    return () => clearTimeout(id);
+  }, [ledgerSearchText]);
+  // A new search starts the register over at page 1.
+  useEffect(() => setLedgerUiPage(1), [ledgerSearch]);
   const { data: ledgerRows } = useListLedgersQuery(
     {
       page: ledgerUiPage - 1,
       size: 10,
+      ...(ledgerSearch ? { search: ledgerSearch } : {}),
       ...(ledgerParty ? { party: ledgerParty } : {}),
-      ...(ledgerShipper ? { shipper: ledgerShipper } : {}),
+      ...(ledgerClosure ? { beClosureStatus: ledgerClosure } : {}),
+      ...(ledgerStatus ? { paymentStatus: ledgerStatus } : {}),
     },
     { skip: !ready || !(apiUser?.role === "Admin" || apiUser?.role === "Accountant") },
   );
@@ -348,18 +371,25 @@ export function FscApp({ screen }: { screen: Screen }) {
       size: 10,
       total: ledgerRows?.total ?? 0,
       onPage: setLedgerUiPage,
+      search: ledgerSearchText,
+      onSearch: (v: string) => setLedgerSearchText(v.slice(0, LEDGER_SEARCH_MAX)),
       party: ledgerParty,
       onParty: (p: string) => {
         setLedgerParty(p);
         setLedgerUiPage(1);
       },
-      shipper: ledgerShipper,
-      onShipper: (v: string) => {
-        setLedgerShipper(v);
+      closure: ledgerClosure,
+      onClosure: (v: string) => {
+        setLedgerClosure(v);
+        setLedgerUiPage(1);
+      },
+      paymentStatus: ledgerStatus,
+      onPaymentStatus: (v: string) => {
+        setLedgerStatus(v);
         setLedgerUiPage(1);
       },
     }),
-    [ledgerUiPage, ledgerRows, ledgerParty, ledgerShipper],
+    [ledgerUiPage, ledgerRows, ledgerSearchText, ledgerParty, ledgerClosure, ledgerStatus],
   );
   const [editing, setEditing] = useState<Shipment | null>(null);
   const [add, setAdd] = useState(false);
@@ -1174,7 +1204,10 @@ export function FscApp({ screen }: { screen: Screen }) {
                         {displayScreen === "dashboard" && (
                           <Dashboard
                             shipper={current.role === "Shipper"}
-                            total={delivered.length}
+                            shipperAccount={
+                              isShipper ? { code: current.short, name: current.name } : undefined
+                            }
+                            onLedger={() => go("ledger")}
                             masterRows={delivered}
                             pending={pending}
                             onApprove={(p) => {

@@ -9,8 +9,6 @@ import {
   FileCheck2,
   Package,
   Truck,
-  ShoppingCart,
-  ArrowUp,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Button } from "@/components/ui/button";
@@ -19,6 +17,8 @@ import { ShipmentsTable } from "./shipments";
 import { PendingShipments } from "./pending-shipments";
 import type { PendingShipment } from "@/lib/pending-shipments";
 import { ChaDashboard } from "./cha-dashboard";
+import { ShipperDashboard } from "./shipper-dashboard";
+import { AccountantDashboard } from "./accountant-dashboard";
 import { type Role, type Shipment } from "@/lib/fsc";
 const chart = [
   { month: "Nov", delivered: 11, active: 3, pending: 2 },
@@ -42,7 +42,8 @@ export function Dashboard({
   onMaster,
   onEdit,
   shipper,
-  total,
+  shipperAccount,
+  onLedger,
   masterRows = [],
   pending = [],
   onApprove,
@@ -51,7 +52,10 @@ export function Dashboard({
   role: Role;
   rows: Shipment[];
   shipper?: boolean;
-  total?: number;
+  /** The signed-in shipper (Shipper role): their account loads the dashboard's money figures. */
+  shipperAccount?: { code: string; name: string } | undefined;
+  /** Opens the Ledger screen (the Shipper dashboard's balance links there). */
+  onLedger?: () => void;
   masterRows?: Shipment[];
   /** Admin only: shipments created by other roles waiting for a decision. */
   pending?: PendingShipment[];
@@ -65,29 +69,16 @@ export function Dashboard({
   const [period, setPeriod] = useState("12");
   if (role === "cha")
     return <ChaDashboard rows={rows} masterRows={masterRows} onShipments={onShipments} />;
-  if (shipper)
+  if (role === "accountant") return <AccountantDashboard onLedger={onLedger ?? onShipments} />;
+  if (shipper && shipperAccount)
     return (
-      <button
-        type="button"
-        className="metric-card shipper-metric"
-        aria-label="Active shipments — open master records"
-        onClick={onMaster}
-      >
-        <div className="metric-top">
-          <span className="sm-label">ACTIVE SHIPMENTS</span>
-          <div className="metric-icon green">
-            <ShoppingCart size={18} />
-          </div>
-        </div>
-        <div className="sm-value">
-          <em>0</em>
-          <span>/</span>
-          {total ?? rows.length}
-        </div>
-        <div className="sm-foot">
-          <ArrowUp size={12} className="inline" /> +10% from last month
-        </div>
-      </button>
+      <ShipperDashboard
+        shipper={shipperAccount}
+        rows={[...rows, ...masterRows]}
+        onOpen={onOpen}
+        onShipments={onShipments}
+        onLedger={onLedger ?? onShipments}
+      />
     );
   const metrics = (
     <div className="metric-grid">
@@ -128,32 +119,28 @@ export function Dashboard({
           icon: Clock3,
           color: "",
         },
-      ]
-        // Accountants see the Active shipments card and nothing else on their dashboard.
-        .filter((item) => role !== "accountant" || item.title === "Active shipments")
-        .map((item) => (
-          <div className="metric-card" key={item.title}>
-            <div className="metric-top">
-              <span>{item.title}</span>
-              <div className={`metric-icon ${item.color}`}>
-                <item.icon size={16} />
-              </div>
-            </div>
-            <b>
-              {item.value} <small>{item.sub}</small>
-            </b>
-            <div className="metric-foot">
-              <span className="flex items-center gap-1">
-                <ArrowUpRight size={12} />
-                {item.foot}
-              </span>
-              {item.footText}
+      ].map((item) => (
+        <div className="metric-card" key={item.title}>
+          <div className="metric-top">
+            <span>{item.title}</span>
+            <div className={`metric-icon ${item.color}`}>
+              <item.icon size={16} />
             </div>
           </div>
-        ))}
+          <b>
+            {item.value} <small>{item.sub}</small>
+          </b>
+          <div className="metric-foot">
+            <span className="flex items-center gap-1">
+              <ArrowUpRight size={12} />
+              {item.foot}
+            </span>
+            {item.footText}
+          </div>
+        </div>
+      ))}
     </div>
   );
-  if (role === "accountant") return metrics;
   return (
     <>
       {metrics}

@@ -8,16 +8,25 @@ export type ServerPage = {
 };
 
 /**
- * The ledger register's server page plus its server-side filters (GET /gsmOxLedger/ledgerList `party` =
- * Party Name, `shipper` = Shipper of any BE line), so choosing one searches every page, not just the rows
- * on screen.
+ * The ledger register's server page plus its server-side filters (GET /gsmOxLedger/ledgerList `search` =
+ * advice and BE line text, `party` = Party Name, `beClosureStatus`, `paymentStatus`; no Shipper filter, at
+ * the user's request 2026-11-16), so searching or choosing one covers every page, not just the rows on screen.
  */
 export type LedgerServerPage = ServerPage & {
+  /** The search box as typed; it is sent once it is 2 to 50 characters (see LEDGER_SEARCH_MIN/MAX). */
+  search?: string;
+  onSearch?: (search: string) => void;
   party?: string;
   onParty?: (party: string) => void;
-  shipper?: string;
-  onShipper?: (shipper: string) => void;
+  closure?: string;
+  onClosure?: (closure: string) => void;
+  paymentStatus?: string;
+  onPaymentStatus?: (status: string) => void;
 };
+
+/** ledgerList `search` limits: shorter or longer text is not sent (the backend rejects it with 400). */
+export const LEDGER_SEARCH_MIN = 2;
+export const LEDGER_SEARCH_MAX = 50;
 
 /** A page of server rows plus the paging metadata the table footer needs. */
 export type Page<T> = {

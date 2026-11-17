@@ -22,13 +22,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Badge, TextField } from "./fields";
 import { useMasterOptions } from "./receiver-directory";
-import { RobContainers, RobStatement } from "./rob-ledger-tables";
+import { RobStatement } from "./rob-ledger-tables";
 import { dropdownId } from "@/lib/shipment-create";
-import {
-  useShipperContainersQuery,
-  useShipperStatementQuery,
-  useShipperSummaryQuery,
-} from "@/store/api/shipper-account.api";
+import { useShipperStatementQuery, useShipperSummaryQuery } from "@/store/api/shipper-account.api";
 import { LedgerTransferForm } from "./ledger-transfer-form";
 import { money, type Shipment } from "@/lib/fsc";
 import type { ShipperAccountStatementResponse } from "@/types/api";
@@ -39,6 +35,8 @@ import { LEDGER_ENTRY_TAB, useLedgerEntry } from "./ledger-entry";
 import type { DebitAdvice } from "@/lib/debit-advice";
 import type { LedgerServerPage } from "@/lib/page";
 import { useStoredView } from "@/lib/stored-view";
+import { balanceClass, usePages } from "./ledger-table-utils";
+import { TablePagination } from "./table-pagination";
 function ShipperLedger({
   shipper,
   shipments,
@@ -52,9 +50,9 @@ function ShipperLedger({
   entries?: import("@/lib/fsc-finance").LedgerEntry[];
   onEntries?: (e: import("@/lib/fsc-finance").LedgerEntry[]) => void;
 }) {
-  // A ledger opened from "Select Shipper" (isAdmin) has no Containers tab (user request, 2026-11-16); a
-  // signed-in shipper's own ledger keeps it.
-  const tabs = isAdmin ? ["Statements", "Add TPT Entry"] : ["Statements", "Containers"];
+  // No Containers tab for anyone (user request, 2026-11-16): the Owner's view from "Select Shipper"
+  // (isAdmin) adds TPT entries, a signed-in shipper's own ledger has the statement only.
+  const tabs = isAdmin ? ["Statements", "Add TPT Entry"] : ["Statements"];
   // The open tab survives a page refresh (user request, 2026-11-16).
   const [view, setView] = useStoredView(
     isAdmin ? "ledger.shipperView" : "ledger.ownView",
@@ -155,137 +153,16 @@ function ShipperLedger({
             setView("Statements");
           }}
         />
-      ) : view === "Containers" ? (
-        <>
-          <RobContainers
-            shipments={ownShipments}
-            fileName={`${shipper.code.toLowerCase()}-containers`}
-            title={`${shipper.name} Ledger · Containers`}
-          />
-          <ContainersAccount shipments={ownShipments} shipperId={shipperId} />
-        </>
       ) : (
-        <ShipperStatement shipper={shipper} shipments={ownShipments} shipperId={shipperId} />
+        <ShipperStatement
+          shipper={shipper}
+          shipments={ownShipments}
+          shipperId={shipperId}
+          // Only the Owner opens a ledger from "Select Shipper" (isAdmin); a shipper's own view hides file numbers.
+          showFileNo={isAdmin}
+        />
       )}
     </>
-  );
-}
-
-/**
- * Containers tab · Design B (shown under Design A — the RobContainers table — for client comparison): the
- * "Containers on this account" view, bound to GET /shipperAccount/containers (AGV, GSM advance, net after
- * advance and advance %). Before the call loads, or if the shipper has no UUID, it falls back to the local
- * shipment records. The amber AGV box is the design; it is not editable.
- */
-function ContainersAccount({
-  shipments,
-  shipperId,
-}: {
-  shipments: Shipment[];
-  shipperId?: string | undefined;
-}) {
-  const [confirmed, setConfirmed] = useState(false);
-  const { data } = useShipperContainersQuery(shipperId ?? "", { skip: !shipperId });
-  const num = (v: string | undefined) => Number(String(v ?? "").replace(/,/g, "")) || 0;
-  type Row = {
-    key: string;
-    fileNo: string;
-    variety: string;
-    eta: string;
-    agv: number;
-    missing: boolean;
-    gsm: number;
-    paid: string;
-    net: number;
-    pct: number;
-  };
-  const rows: Row[] =
-    data && data.length
-      ? data.map((c, i) => ({
-          key: c.shipmentId || `${c.fileNo ?? ""}-${i}`,
-          fileNo: c.fileLabel || c.fileNo || "—",
-          variety: c.variety || "—",
-          eta: c.eta || "—",
-          agv: c.agv ?? 0,
-          missing: Boolean(c.isAgvMissing),
-          gsm: c.gsmAdvance ?? 0,
-          paid: c.lastGsmDate || "—",
-          net: c.netAfterAdvance ?? 0,
-          pct: c.advancePct ?? 0,
-        }))
-      : shipments.map((s) => {
-          const agv = num(s.agv);
-          const gsm = num(s.gsm);
-          return {
-            key: s.vase,
-            fileNo: s.dos || "—",
-            variety: s.desc || "—",
-            eta: s.eta || "—",
-            agv,
-            missing: false,
-            gsm,
-            paid: s.gsmd || "—",
-            net: agv - gsm,
-            pct: agv > 0 ? (gsm / agv) * 100 : 0,
-          };
-        });
-  return (
-    <div className="panel shipments-panel rob-panel ctr-account">
-      <div className="panel-header">
-        <div>
-          <h2>Containers on this account</h2>
-          <p>Each container&apos;s AGV, GSM advance, net after advance and advance %.</p>
-        </div>
-        <Button size="sm" variant="outline" onClick={() => setConfirmed(true)}>
-          Mark all AGV as confirmed
-        </Button>
-      </div>
-      <div className="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              {[
-                "File No.",
-                "Variety",
-                "ETA",
-                "AGV",
-                "GSM Advance",
-                "Paid",
-                "Net after advance",
-                "Advance %",
-              ].map((h) => (
-                <th key={h}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.key}>
-                <td className="font-semibold">{r.fileNo}</td>
-                <td className="rob-desc">{r.variety}</td>
-                <td>{r.eta}</td>
-                <td>
-                  <span className={`agv-cell ${confirmed && !r.missing ? "confirmed" : ""}`}>
-                    {money(r.agv)}
-                  </span>
-                </td>
-                <td className="amt-advance">{r.gsm ? money(r.gsm) : "—"}</td>
-                <td>{r.paid}</td>
-                <td className="font-semibold">{money(r.net)}</td>
-                <td>{r.pct ? `${r.pct.toFixed(1)}%` : "—"}</td>
-              </tr>
-            ))}
-            {!rows.length && (
-              <tr>
-                <td colSpan={8} className="empty-state">
-                  No containers on this account.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
   );
 }
 
@@ -309,6 +186,8 @@ const PAYMENT_KIND_LABEL = {
   OX: "Direct OX",
   "": "Entry",
 } as const;
+
+/** Chip colour for an entry type: a charge is amber, a payment that reduces the balance green. */
 const PAYMENT_KIND_CLASS = {
   CHARGE: "charge",
   GSM: "advance",
@@ -317,7 +196,29 @@ const PAYMENT_KIND_CLASS = {
   "": "info",
 } as const;
 
-/** A local-fallback entry kind (CHARGE | ADVANCE | TRANSFER) as a chip label. */
+/**
+ * The statement's Entry cell: the entry type as a chip, a dash, then the file number, nothing else (user
+ * request, 2026-11-16). With no file number, just the chip; only the Owner is given file numbers.
+ */
+function EntryCell({
+  label,
+  tone,
+  fileNo,
+}: {
+  label: string;
+  tone: string;
+  fileNo?: string | null | undefined;
+}) {
+  const file = fileNo?.trim();
+  return (
+    <td className="rob-desc">
+      <span className={`entry-chip ${tone}`}>{label}</span>
+      {file ? `- ${file}` : null}
+    </td>
+  );
+}
+
+/** A local-fallback entry kind (CHARGE | ADVANCE | TRANSFER) as the Entry label. */
 function entryKindLabel(kind?: string): string {
   if (!kind) return "Entry";
   return kind
@@ -326,34 +227,6 @@ function entryKindLabel(kind?: string): string {
       ["TPT", "GSM", "OX", "BE"].includes(w) ? w : w.charAt(0) + w.slice(1).toLowerCase(),
     )
     .join(" ");
-}
-/** Chip colour for a transactionType: a charge is amber, anything that reduces the balance is green. */
-function entryKindClass(kind?: string): string {
-  if (kind === "CHARGE") return "charge";
-  if (kind === "ADVANCE" || kind === "GSM_ADVANCE") return "advance";
-  return "transfer";
-}
-/** The title shown next to the chip for a statement line of the given kind. */
-function statementTitle(
-  kind: string,
-  containerNumber: string,
-  label: string,
-  route: string,
-): string {
-  const who = containerNumber || label;
-  switch (kind) {
-    case "CHARGE":
-      return `Container ${who} arrived`;
-    case "ADVANCE":
-    case "GSM_ADVANCE":
-      return `GSM advance${who ? ` · ${who}` : ""}`;
-    case "TRANSFER":
-      return `Transfer (TPT)${route ? ` via ${route}` : ""}`;
-    case "TPT_USE":
-      return `TPT used${who ? ` · ${who}` : ""}`;
-    default:
-      return who || "Entry";
-  }
 }
 
 /**
@@ -367,14 +240,28 @@ function ShipperStatement({
   shipper,
   shipments,
   shipperId,
+  showFileNo,
 }: {
   shipper: { code: string; name: string };
   shipments: Shipment[];
   shipperId?: string | undefined;
+  /** The Owner sees "TPT - <file no>"; everyone else only the type (user request, 2026-11-16). */
+  showFileNo: boolean;
 }) {
   const { data } = useShipperStatementQuery({ shipperId: shipperId ?? "" }, { skip: !shipperId });
-  if (data?.transactions) return <PaymentStatement shipper={shipper} data={data} />;
-  return <LocalStatement shipper={shipper} shipments={shipments} />;
+  // Keyed by shipper, so picking another shipper starts on page 1.
+  if (data?.transactions)
+    return (
+      <PaymentStatement key={shipper.code} shipper={shipper} data={data} showFileNo={showFileNo} />
+    );
+  return (
+    <LocalStatement
+      key={shipper.code}
+      shipper={shipper}
+      shipments={shipments}
+      showFileNo={showFileNo}
+    />
+  );
 }
 
 /**
@@ -386,9 +273,11 @@ function ShipperStatement({
 function PaymentStatement({
   shipper,
   data,
+  showFileNo,
 }: {
   shipper: { code: string; name: string };
   data: ShipperAccountStatementResponse;
+  showFileNo: boolean;
 }) {
   const transactions = data.transactions ?? [];
   const summary = data.summary;
@@ -414,10 +303,16 @@ function PaymentStatement({
     summary?.totalCharges ?? transactions.reduce((n, t) => n + (t.charge ?? 0), 0);
   const totalPaid = summary?.totalPaid ?? transactions.reduce((n, t) => n + (t.paid ?? 0), 0);
   const closing = data.closingBalance?.amount ?? summary?.balance ?? totalCharges - totalPaid;
+  // Paged (user request, 2026-11-16); the opening and closing rows stay on every page as the summary.
+  const { visible, pagination } = usePages(transactions);
   return (
     <div className="panel shipments-panel rob-panel stmt-panel">
       <div className="panel-header">
-        <h2>Statement · {shipper.name}</h2>
+        <StatementHeading
+          name={shipper.name}
+          label={data.openingBalance?.description || "Opening balance"}
+          amount={opening}
+        />
         <p>
           Newest first — container charges increase the balance, GSM, TPT / direct OX payments
           reduce it
@@ -433,33 +328,8 @@ function PaymentStatement({
             </tr>
           </thead>
           <tbody>
-            <tr className="stmt-open">
-              <td />
-              <td className="font-semibold">
-                {data.openingBalance?.description || "Opening balance"}
-              </td>
-              <td />
-              <td />
-              <td className="font-semibold">{money(opening)}</td>
-            </tr>
-            {transactions.map((t, i) => {
+            {visible.map((t, i) => {
               const kind = paymentKind(t.transactionType);
-              const sh = t.shipment;
-              const sub = [
-                sh?.variety ?? "",
-                t.referenceNo ? `Ref ${t.referenceNo}` : "",
-                sh?.beNo ? `BE ${sh.beNo}` : "",
-                sh?.blNo ? `BL ${sh.blNo}` : "",
-                t.notes ?? "",
-              ]
-                .filter(Boolean)
-                .join(" · ");
-              const file = sh?.fileLabel || sh?.fileNo || "";
-              const title =
-                t.description ||
-                `${PAYMENT_KIND_LABEL[kind]}${file ? ` · File ${file}` : ""}${
-                  sh?.containerNumber ? ` (${sh.containerNumber})` : ""
-                }`;
               const isCharge = kind === "CHARGE";
               const balance = t.balance ?? 0;
               return (
@@ -468,15 +338,13 @@ function PaymentStatement({
                     {t.transactionDate || "—"}
                     {t.isDateAssumed && <small className="stmt-flag">date assumed</small>}
                   </td>
-                  <td className="rob-desc">
-                    <span className={`entry-chip ${PAYMENT_KIND_CLASS[kind]}`}>
-                      {kind
-                        ? PAYMENT_KIND_LABEL[kind]
-                        : t.transactionType || PAYMENT_KIND_LABEL[""]}
-                    </span>
-                    {title}
-                    {sub ? <small>{sub}</small> : null}
-                  </td>
+                  <EntryCell
+                    label={
+                      kind ? PAYMENT_KIND_LABEL[kind] : t.transactionType || PAYMENT_KIND_LABEL[""]
+                    }
+                    tone={PAYMENT_KIND_CLASS[kind]}
+                    fileNo={showFileNo ? t.shipment?.fileNo || t.shipment?.fileLabel : null}
+                  />
                   {/* A charge line always shows its AGV, even 0.00 (no AGV entered yet). */}
                   <td className={t.charge ? "amt-charge" : "rob-none"}>
                     {isCharge || t.charge ? money(t.charge ?? 0) : "—"}
@@ -484,9 +352,7 @@ function PaymentStatement({
                   <td className={t.paid ? "amt-paid" : "rob-none"}>
                     {t.paid ? money(t.paid) : "—"}
                   </td>
-                  <td className={`font-semibold ${balance < 0 ? "amt-negative" : ""}`}>
-                    {money(balance)}
-                  </td>
+                  <td className={balanceClass(balance)}>{money(balance)}</td>
                 </tr>
               );
             })}
@@ -510,13 +376,35 @@ function PaymentStatement({
               </td>
               <td className="amt-charge">{money(totalCharges)}</td>
               <td className="amt-paid">{money(totalPaid)}</td>
-              <td className={`font-semibold ${closing < 0 ? "amt-negative" : ""}`}>
-                {money(closing)}
-              </td>
+              <td className={balanceClass(closing)}>{money(closing)}</td>
             </tr>
           </tbody>
         </table>
       </div>
+      <TablePagination {...pagination} noun="entries" />
+    </div>
+  );
+}
+
+/**
+ * The statement's heading with its opening balance under it (user request, 2026-11-16): moved out of the
+ * table so it reads as the starting point, e.g. "TPT reserve balance 17,485.00".
+ */
+function StatementHeading({
+  name,
+  label,
+  amount,
+}: {
+  name: string;
+  label: string;
+  amount: number;
+}) {
+  return (
+    <div className="stmt-heading">
+      <h2>Statement · {name}</h2>
+      <p>
+        {label} <strong className={balanceClass(amount)}>{money(amount)}</strong>
+      </p>
     </div>
   );
 }
@@ -528,16 +416,17 @@ const STATEMENT_HEADS = ["Date", "Entry", "Charges (+)", "Paid (−)", "Balance"
 function LocalStatement({
   shipper,
   shipments,
+  showFileNo,
 }: {
   shipper: { code: string; name: string };
   shipments: Shipment[];
+  showFileNo: boolean;
 }) {
   type Row = {
     key: string;
     date: string;
     kind: string;
-    title: string;
-    sub: string;
+    fileNo: string;
     charge: number;
     paid: number;
     balance: number;
@@ -554,8 +443,7 @@ function LocalStatement({
         key: `${s.vase}-c`,
         date: s.eta,
         kind: "CHARGE",
-        title: statementTitle("CHARGE", s.vase, "", ""),
-        sub: s.desc,
+        fileNo: s.dos,
         charge: agv,
         paid: 0,
         balance: running,
@@ -567,8 +455,7 @@ function LocalStatement({
         key: `${s.vase}-a`,
         date: s.gsmd,
         kind: "ADVANCE",
-        title: statementTitle("ADVANCE", s.vase, "", ""),
-        sub: s.desc,
+        fileNo: s.dos,
         charge: 0,
         paid: gsm,
         balance: running,
@@ -580,8 +467,7 @@ function LocalStatement({
         key: `${s.vase}-t`,
         date: s.bulld || s.gsmd,
         kind: "TRANSFER",
-        title: `Transfer (TPT) · ${s.vase}`,
-        sub: s.desc,
+        fileNo: s.dos,
         charge: 0,
         paid: tpt,
         balance: running,
@@ -591,10 +477,11 @@ function LocalStatement({
   const totalCharge = rows.reduce((t, r) => t + r.charge, 0);
   const totalPaid = rows.reduce((t, r) => t + r.paid, 0);
   const closing = totalCharge - totalPaid;
+  const { visible: shown, pagination } = usePages(rows);
   return (
     <div className="panel shipments-panel rob-panel stmt-panel">
       <div className="panel-header">
-        <h2>Statement · {shipper.name}</h2>
+        <StatementHeading name={shipper.name} label="Opening balance" amount={0} />
         <p>
           Entries in date order — charges increase the balance, advances and transfers reduce it
         </p>
@@ -609,30 +496,21 @@ function LocalStatement({
             </tr>
           </thead>
           <tbody>
-            <tr className="stmt-open">
-              <td />
-              <td className="font-semibold">Opening balance</td>
-              <td />
-              <td />
-              <td className="font-semibold">{money(0)}</td>
-            </tr>
-            {rows.map((r) => (
+            {shown.map((r) => (
               <tr key={r.key}>
                 <td>{r.date || "—"}</td>
-                <td className="rob-desc">
-                  <span className={`entry-chip ${entryKindClass(r.kind)}`}>
-                    {entryKindLabel(r.kind)}
-                  </span>
-                  {r.title}
-                  {r.sub ? <small>{r.sub}</small> : null}
-                </td>
+                <EntryCell
+                  label={entryKindLabel(r.kind)}
+                  tone={
+                    r.kind === "CHARGE" ? "charge" : r.kind === "ADVANCE" ? "advance" : "transfer"
+                  }
+                  fileNo={showFileNo ? r.fileNo : null}
+                />
                 <td className={r.charge ? "amt-charge" : "rob-none"}>
                   {r.charge ? money(r.charge) : "—"}
                 </td>
                 <td className={r.paid ? "amt-paid" : "rob-none"}>{r.paid ? money(r.paid) : "—"}</td>
-                <td className={`font-semibold ${r.balance < 0 ? "amt-negative" : ""}`}>
-                  {money(r.balance)}
-                </td>
+                <td className={balanceClass(r.balance)}>{money(r.balance)}</td>
               </tr>
             ))}
             {!rows.length && (
@@ -647,13 +525,12 @@ function LocalStatement({
               <td className="font-semibold">Closing balance</td>
               <td className="amt-charge">{money(totalCharge)}</td>
               <td className="amt-paid">{money(totalPaid)}</td>
-              <td className={`font-semibold ${closing < 0 ? "amt-negative" : ""}`}>
-                {money(closing)}
-              </td>
+              <td className={balanceClass(closing)}>{money(closing)}</td>
             </tr>
           </tbody>
         </table>
       </div>
+      <TablePagination {...pagination} noun="entries" />
     </div>
   );
 }
