@@ -140,14 +140,18 @@ const baseQueryWithAuth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQuery
     resetCsrfToken();
     result = await rawBaseQuery(await withCsrf(args, api, extra), api, extra);
   }
-  if (api.endpoint === "login") resetCsrfToken();
+  // Signing in (password or authenticator code) may start a new server session, with a new token.
+  if (api.endpoint === "login" || api.endpoint === "totpVerify") resetCsrfToken();
   // Screens get the data itself, whichever envelope the backend used (see unwrapApi).
   if (!result.error && isApiEnvelope(result.data)) result = { ...result, data: result.data.data };
   // A wrong current password on login / change-password also answers 401; that is not an expired session.
-  // `me` never hits the network now, so it is left out of this handler too.
+  // `me` never hits the network now, so it is left out of this handler too. On the authenticator step a
+  // 401 means "sign in again", which that step handles itself.
   if (
     result.error?.status === 401 &&
     api.endpoint !== "login" &&
+    api.endpoint !== "totpSetup" &&
+    api.endpoint !== "totpVerify" &&
     api.endpoint !== "changePassword" &&
     api.endpoint !== "me"
   ) {

@@ -1,5 +1,11 @@
 import type { LoginRequest, Me } from "@/types/api";
-import { SIGNED_OUT, toMe } from "@/lib/auth-session";
+import {
+  SIGNED_OUT,
+  readLoginReply,
+  toTotpSetup,
+  type LoginStep,
+  type TotpSetup,
+} from "@/lib/auth-session";
 import { readStoredMe } from "@/lib/session-store";
 import { baseApi } from "./baseApi";
 
@@ -18,10 +24,30 @@ export const authApi = baseApi.injectEndpoints({
       },
       providesTags: ["Session"],
     }),
-    // POST /auth/login with { username, password } -> Me.
-    login: build.mutation<Me, LoginRequest>({
+    // POST /auth/login with { username, password } -> Me, or "totpRequired" when the member must enter a
+    // Google Authenticator code first (their 15-day access ran out); that reply is not a session.
+    login: build.mutation<LoginStep, LoginRequest>({
       query: (body) => ({ url: "/auth/login", method: "POST", body }),
-      transformResponse: (raw: unknown) => toMe(raw),
+      transformResponse: (raw: unknown) => readLoginReply(raw),
+    }),
+    // POST /auth/totp/setup (no body) -> the QR code to scan; the same one for the whole 15-day cycle.
+    totpSetup: build.mutation<TotpSetup, void>({
+      query: () => ({ url: "/auth/totp/setup", method: "POST" }),
+      transformResponse: (raw: unknown) => toTotpSetup(raw),
+    }),
+    // POST /auth/totp/verify { code } -> signs the member in for 15 days (same reply as login).
+    totpVerify: build.mutation<LoginStep, { code: string }>({
+      query: (body) => ({ url: "/auth/totp/verify", method: "POST", body }),
+      transformResponse: (raw: unknown) => readLoginReply(raw),
+    }),
+    // POST /auth/totp/reset/{userId} (owner): the member scans a new QR code at their next sign-in.
+    totpReset: build.mutation<void, number | string>({
+      query: (userId) => ({
+        url: `/auth/totp/reset/${encodeURIComponent(String(userId))}`,
+        method: "POST",
+        responseHandler: "content-type", // empty on success; errors are JSON
+      }),
+      transformResponse: () => undefined,
     }),
     // POST /auth/logout ends the server-side session.
     logout: build.mutation<void, void>({
@@ -55,6 +81,9 @@ export const authApi = baseApi.injectEndpoints({
 export const {
   useMeQuery,
   useLoginMutation,
+  useTotpSetupMutation,
+  useTotpVerifyMutation,
+  useTotpResetMutation,
   useLogoutMutation,
   useChangePasswordMutation,
   useResetRequestMutation,

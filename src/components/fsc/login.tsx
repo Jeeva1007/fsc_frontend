@@ -5,6 +5,11 @@ import { TextField } from "./fields";
 import { signInSchema, validateForm, type FieldErrors } from "@/lib/login-schema";
 import { snackbar } from "@/components/ui/snackbar";
 import { BrandLogo } from "./brand-logo";
+import { TotpStep, type TotpVerifyError } from "./totp-step";
+import type { TotpSetup } from "@/lib/auth-session";
+
+/** What a password sign-in led to: signed in, an authenticator code still needed, or an error to show. */
+export type SignInResult = "signedIn" | "totpRequired" | { error: string };
 
 // Eye button shown inside a password field; toggles between masked and visible text.
 // `compact` sizes it for the 38px fields of the app's forms (the login screen's fields are taller).
@@ -33,12 +38,17 @@ export function RevealButton({
   );
 }
 
-// Signs in through POST /api/auth/login ({ username, password }). `onLogin` resolves to an error message
-// to show, or null on success. There is no "Forgot password?" (removed at the user's request, 2026-11-10).
+// Signs in through POST /api/auth/login ({ username, password }). When the member's authenticator access
+// ran out, the card shows the Google Authenticator step instead (totp-step.tsx). There is no
+// "Forgot password?" (removed at the user's request, 2026-11-10).
 export function Login({
   onLogin,
+  onTotpSetup,
+  onTotpVerify,
 }: {
-  onLogin: (username: string, password: string) => Promise<string | null>;
+  onLogin: (username: string, password: string) => Promise<SignInResult>;
+  onTotpSetup: () => Promise<TotpSetup | { error: string }>;
+  onTotpVerify: (code: string) => Promise<TotpVerifyError | null>;
 }) {
   const [form, setForm] = useState(false);
   const [username, setUsername] = useState("");
@@ -46,6 +56,8 @@ export function Login({
   const [showPassword, setShowPassword] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [pending, setPending] = useState(false);
+  // The password was accepted but a Google Authenticator code is still needed.
+  const [totp, setTotp] = useState(false);
 
   const clear = (field: string) => {
     setFieldErrors((e) => (e[field] ? { ...e, [field]: "" } : e));
@@ -57,8 +69,12 @@ export function Login({
     try {
       const invalid = validateForm(signInSchema, { username, password });
       if (invalid) return setFieldErrors(invalid);
-      const message = await onLogin(username, password);
-      if (message) snackbar.error("Sign in failed", { description: message });
+      const result = await onLogin(username, password);
+      if (result === "totpRequired") {
+        setPassword(""); // not kept in memory once accepted
+        setTotp(true);
+      } else if (typeof result === "object")
+        snackbar.error("Sign in failed", { description: result.error });
     } finally {
       setPending(false);
     }
@@ -86,62 +102,73 @@ export function Login({
             <BrandLogo className="login-brand-logo" />
             <h2>FSC</h2>
           </aside>
-          <form
-            noValidate
-            onSubmit={(e) => {
-              e.preventDefault();
-              void submit();
-            }}
-          >
-            <h1>Welcome.</h1>
-            <p>Lets get ready to dive in.</p>
-            <label>
-              Username
-              <TextField
-                ariaLabel="Username"
-                value={username}
-                onChange={(v) => {
-                  setUsername(v);
-                  clear("username");
-                }}
-                inputProps={{
-                  "aria-invalid": fieldErrors["username"] ? true : undefined,
-                  autoComplete: "username",
-                  autoFocus: true,
-                  maxLength: 60,
-                }}
-              />
-              {fieldErrors["username"] && <small role="alert">{fieldErrors["username"]}</small>}
-            </label>
-            <label>
-              Password
-              <TextField
-                ariaLabel="Password"
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(v) => {
-                  setPassword(v);
-                  clear("password");
-                }}
-                inputProps={{
-                  "aria-invalid": fieldErrors["password"] ? true : undefined,
-                  autoComplete: "current-password",
-                  maxLength: 200,
-                }}
-                endAdornment={
-                  <RevealButton
-                    shown={showPassword}
-                    onToggle={() => setShowPassword((v) => !v)}
-                    label="password"
-                  />
-                }
-              />
-              {fieldErrors["password"] && <small role="alert">{fieldErrors["password"]}</small>}
-            </label>
-            <Button type="submit" className="login-submit" disabled={pending}>
-              {pending ? "Signing in…" : "Take that bite!"}
-            </Button>
-          </form>
+          {totp ? (
+            <TotpStep
+              onSetup={onTotpSetup}
+              onVerify={onTotpVerify}
+              onBack={(message) => {
+                setTotp(false);
+                if (message) snackbar.error("Sign in again", { description: message });
+              }}
+            />
+          ) : (
+            <form
+              noValidate
+              onSubmit={(e) => {
+                e.preventDefault();
+                void submit();
+              }}
+            >
+              <h1>Welcome.</h1>
+              <p>Lets get ready to dive in.</p>
+              <label>
+                Username
+                <TextField
+                  ariaLabel="Username"
+                  value={username}
+                  onChange={(v) => {
+                    setUsername(v);
+                    clear("username");
+                  }}
+                  inputProps={{
+                    "aria-invalid": fieldErrors["username"] ? true : undefined,
+                    autoComplete: "username",
+                    autoFocus: true,
+                    maxLength: 60,
+                  }}
+                />
+                {fieldErrors["username"] && <small role="alert">{fieldErrors["username"]}</small>}
+              </label>
+              <label>
+                Password
+                <TextField
+                  ariaLabel="Password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(v) => {
+                    setPassword(v);
+                    clear("password");
+                  }}
+                  inputProps={{
+                    "aria-invalid": fieldErrors["password"] ? true : undefined,
+                    autoComplete: "current-password",
+                    maxLength: 200,
+                  }}
+                  endAdornment={
+                    <RevealButton
+                      shown={showPassword}
+                      onToggle={() => setShowPassword((v) => !v)}
+                      label="password"
+                    />
+                  }
+                />
+                {fieldErrors["password"] && <small role="alert">{fieldErrors["password"]}</small>}
+              </label>
+              <Button type="submit" className="login-submit" disabled={pending}>
+                {pending ? "Signing in…" : "Take that bite!"}
+              </Button>
+            </form>
+          )}
         </div>
       )}
     </div>
